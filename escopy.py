@@ -172,9 +172,6 @@ def scan2(client, query=None, scroll='5m', **kwargs):
         
         if not resp['hits']['hits']:
             break
-
-        if not resp['hits']['hits']:
-            break
         for hit in resp['hits']['hits']:
             if "fields" in hit.keys():
                 for field in hit['fields'].keys():
@@ -252,22 +249,24 @@ def reindex2(client, source_index, target_index, target_client=None, chunk_size=
 
 if __name__ == '__main__':
     
-    hosts = ["es-cdaq"]
-    old_index = "runindex_prod_20140814_2"
-    new_index = "runindex_prod_20140818"
+    old_hosts = ["0:9300"]
+    new_hosts = ["0:9200"]
+    old_index = "runriver_stats"
+    new_index = "runriver_stats"
 
-    read_aliases = ["runindex_prod_read"]
-    write_aliases = ["runindex_prod_write","runindex_prod"]
+    #read_aliases = ["runindex_prod_read"]
+    #write_aliases = ["runindex_prod_write","runindex_prod"]
     chunk_size = 5000
 
-    es = Elasticsearch(hosts)
+    es_old = Elasticsearch(old_hosts)
+    es_new = Elasticsearch(new_hosts)
 
     print "GET OLD MAPPING "
-    mapping = es.indices.get_mapping(index = old_index)
+    mapping = es_old.indices.get_mapping(index = old_index)
     #print json.dumps(mapping,indent=2)
 
     print "GET OLD SETTINGS "
-    settings = es.indices.get_settings(index = old_index)
+    settings = es_old.indices.get_settings(index = old_index)
     #print json.dumps(settings,indent=2)
 
     print "CREATE BODY FOR NEW INDEX "
@@ -281,7 +280,7 @@ if __name__ == '__main__':
     #print json.dumps(body,indent=2)
 
     print "CREATE NEW INDEX "
-    print es.indices.create(index = new_index, body = body , ignore = 400)
+    print es_new.indices.create(index = new_index, body = body , ignore = 400)
 
 #    print "LINK ALIASES {0} TO {1}".format(repr(read_aliases),new_index)
 #    body = {"actions":[]};
@@ -289,34 +288,34 @@ if __name__ == '__main__':
 #        body["actions"].append({ "add":    { "index": new_index, "alias": alias }})
 #    print es.indices.update_aliases(body)
 
-    print "SWITCH ALIASES {0} FROM {1} TO {2}".format(repr(write_aliases),old_index,new_index)
-    body = {"actions":[]};
-    for alias in write_aliases:
-        body["actions"].append({ "remove": { "index": old_index, "alias": alias }})
-        body["actions"].append({ "add":    { "index": new_index, "alias": alias }})
-    print es.indices.update_aliases(body)
+#    print "SWITCH ALIASES {0} FROM {1} TO {2}".format(repr(write_aliases),old_index,new_index)
+#    body = {"actions":[]};
+#    for alias in write_aliases:
+#        body["actions"].append({ "remove": { "index": old_index, "alias": alias }})
+#        body["actions"].append({ "add":    { "index": new_index, "alias": alias }})
+#    print es.indices.update_aliases(body)
 
       
     #print "SET {0} AS READONLY".format(old_index).ljust(80,">")
     #print es.indices.put_settings(index = old_index, body = { "index": { "blocks.read_only": True }} )
 
 
-    print "{0} REINDEX {1} TO {2}".format( time.strftime("%Y-%m-%d %H:%M:%S") ,old_index,new_index)
+    print "{0} COPY INDEX {1} FROM {2} TO {3}".format( time.strftime("%Y-%m-%d %H:%M:%S") , old_index , old_hosts, new_hosts)
     startTime = time.time()
-    resp =  reindex2(client = es, source_index = old_index , target_index = new_index, chunk_size = chunk_size )
+    resp =  reindex2(client = es_old, source_index = old_index , target_client = es_new, target_index = new_index, chunk_size = chunk_size )
     endTime = time.time()
     timeElapsed = str(datetime.timedelta( seconds = endTime - startTime) )
     print ""
-    print time.strftime("%Y-%m-%d %H:%M:%S") + ' (success,failed): ' + repr(resp) + ' time elapsed: ' + timeElapsed
+    outstr =  time.strftime("%Y-%m-%d %H:%M:%S") + ' (success,failed): ' + repr(resp) + ' time elapsed: ' + timeElapsed
+    print outstr.rjust(80,' ')
     
-    
-    print "UNLINK ALIASES {0} FROM {1}".format(repr(read_aliases),old_index).ljust(80,">")
-    body = {"actions":[]};
-    for alias in read_aliases:
-        body["actions"].append({ "remove": { "index": old_index, "alias": alias }})
-        body["actions"].append({ "add":    { "index": new_index, "alias": alias }})
-    #print json.dumps(body,indent=2)
-    print es.indices.update_aliases(body)
+#    print "UNLINK ALIASES {0} FROM {1}".format(repr(read_aliases),old_index).ljust(80,">")
+#    body = {"actions":[]};
+#    for alias in read_aliases:
+#        body["actions"].append({ "remove": { "index": old_index, "alias": alias }})
+#        body["actions"].append({ "add":    { "index": new_index, "alias": alias }})
+#    #print json.dumps(body,indent=2)
+#    print es.indices.update_aliases(body)
 
     sys.exit(0)
 
